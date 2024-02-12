@@ -12,6 +12,11 @@ class face{
             mat_ptr = object;
         }
         bool hit(const ray& r, double t_min, double t_max, hit_record& rec) const;
+        bool operator>(const face& f);
+        bool operator<(const face& f);
+
+        double min(int index); // 0 ? x, 1 ? y, : z
+        double max(int index); // 0 ? x, 1 ? y, : z
 
         point3 vertices[3];
         shared_ptr<Material> mat_ptr; 
@@ -65,5 +70,46 @@ bool face::hit(const ray& r, double t_min, double t_max, hit_record& rec) const{
     rec.mat_ptr = mat_ptr;
     return true;
 }
+
+bool face::operator>(const face& f)
+{
+    double thisOrigin = (vertices[0].x + vertices[1].x + vertices[2].x) / 3;
+    double otherOrigin = (f.vertices[0].x + f.vertices[1].x + f.vertices[2].x) / 3;
+
+    return thisOrigin > otherOrigin;
+}
+
+bool face::operator<(const face& f)
+{
+    double thisOrigin = (vertices[0].x + vertices[1].x + vertices[2].x) / 3;
+    double otherOrigin = (f.vertices[0].x + f.vertices[1].x + f.vertices[2].x) / 3;
+   
+    return thisOrigin < otherOrigin;
+}
+
+double face::min(int index){
+    double min = vertices[0][index];
+
+    if(min > vertices[1][index])
+        min = vertices[1][index];
+
+    if(min > vertices[2][index])
+        return vertices[2][index];
+    
+    return min;
+}
+
+double face::max(int index){
+    double max = vertices[0][index];
+
+    if(max < vertices[1][index])
+        max = vertices[1][index];
+
+    if(max < vertices[2][index])
+        return vertices[2][index];
+    
+    return max;
+}
+
 
 #endif

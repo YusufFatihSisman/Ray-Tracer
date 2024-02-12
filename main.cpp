@@ -10,9 +10,10 @@
 #include "face.h"
 #include "faceList.h"
 #include "pointLight.h"
+#include "bvh.h"
 #include <thread>
 #include "time.h"
-#include <bits/stdc++.h>
+//#include <bits/stdc++.h>
 
 using namespace std;
 using namespace rapidxml;
@@ -22,11 +23,13 @@ color background;
 color ambientlight;
 vector<double> vertexdata;
 vector<Mesh> meshes;
-vector<Material> materials;
+vector<shared_ptr<Material>> materials;
 vector<pointLight> pointLights;
 thread threads[8];
 Camera camera;
 faceList faces = faceList();
+vector<bvh> boundIngVolumeHierarchies;
+bvh finalBvh;
 
 void parse_xml(string filename){
     xml_document<> doc;
@@ -124,7 +127,9 @@ void parse_xml(string filename){
 
         Material material;
         initMaterial(material, id, ambient, diffuse, specular, phongexponent, reflectance);
-        materials.push_back(material);
+        shared_ptr<Material> mt(new Material);
+        *mt = material;
+        materials.push_back(mt);
 
         theFile.close();
     }
@@ -155,27 +160,29 @@ void parse_xml(string filename){
 
 }       
 
-color ray_color(const ray& r, const faceList& faces, int depth) {
+color ray_color(const ray& r, const bvh& boundingVH, int depth) {
     hit_record hr;             
     color c = color(0.0, 0.0, 0.0);
-    if(faces.hit(r, 0.0, INFINITY_T, hr)){ 
+    if(boundingVH.hit(r, 0.0, INFINITY_T, hr)){ 
         for(const pointLight& light : pointLights){
             if(depth > 0 && (hr.mat_ptr->reflectance.x == 1.0 || hr.mat_ptr->reflectance.y == 1.0 || hr.mat_ptr->reflectance.z == 1.0)){
                 vec3 w0 = unit_vector(r.origin() - hr.p);
                 vec3 wr = -w0 + 2*hr.normal*(dot(hr.normal, w0));
-                c += light.illuminate(r, hr, faces) + hr.mat_ptr->reflectance * ray_color(ray((hr.p + wr * EPS), wr), faces, depth-1);
+                c += light.illuminate(r, hr, boundingVH) + hr.mat_ptr->reflectance * ray_color(ray((hr.p + wr * EPS), wr), boundingVH, depth-1);
             }else{
-                c += light.illuminate(r, hr, faces);  
+                c += light.illuminate(r, hr, boundingVH);  
             }
         }           
         return c + hr.mat_ptr->ambient * ambientlight; 
-    }                    
+    }                   
     return background;          
 }
 
 void setData(){     
     for(int i=0; i < meshes.size(); i++){
         int j = 0;
+        // create facelist hear and reset
+        faceList faces = faceList();
         while(j < meshes[i].faces.size()){
             int index = (meshes[i].faces[j]-1)*3;
             point3 p0 = point3(vertexdata[index], vertexdata[index+1], vertexdata[index+2]);
@@ -183,17 +190,45 @@ void setData(){
             point3 p1 = point3(vertexdata[index], vertexdata[index+1], vertexdata[index+2]);
             index =  (meshes[i].faces[j+2]-1)*3;
             point3 p2 = point3(vertexdata[index], vertexdata[index+1], vertexdata[index+2]);
-            Material mt;
             for(int k = 0; k < materials.size(); k++){
-                if(meshes[i].materialId == materials[k].id){
-                    mt = materials[k];  
+                if(meshes[i].materialId == materials[k]->id){
+                    shared_ptr<face> f(new face(p0, p1, p2, materials[k])); 
+                    faces.add(f); 
                 }   
             }   
-            face f = face(p0, p1, p2, make_shared<Material>(mt));
-            faces.add(make_shared<face>(f));
             j += 3;
         }
-    }       
+        // sort facelist and create bvh
+        faces.sort();
+        /*for(const auto& object : faces->objects){
+            double thisOrigin = (object->vertices[0].x + object->vertices[1].x + object->vertices[2].x) / 3;
+            cout << thisOrigin << "\n";
+        } */
+        bvh boundingVolumeHierarchy = bvh(faces.objects);
+        boundIngVolumeHierarchies.push_back(boundingVolumeHierarchy);
+        //boundingVolumeHierarchy.printBT();
+        //cout << "\n\n";
+        //delete(faces);
+    } 
+
+    for (int i = 0; i < boundIngVolumeHierarchies.size() - 1; i++) { 
+        int max_idx = i; 
+        for (int j = i + 1; j < boundIngVolumeHierarchies.size() ; j++) 
+        {
+            if (boundIngVolumeHierarchies[j] < boundIngVolumeHierarchies[max_idx]) 
+                max_idx = j; 
+        }
+        bvh temp =  boundIngVolumeHierarchies[max_idx];
+        boundIngVolumeHierarchies[max_idx] = boundIngVolumeHierarchies[i];
+        boundIngVolumeHierarchies[i] = temp;
+    } 
+
+    finalBvh = vectorToBvh(boundIngVolumeHierarchies);
+    //finalBvh.printBT();
+    /*for(const auto& object : faces.objects){
+        cout << object->mat_ptr.use_count() << "\n";
+    }  */  
+
 }
 
 void calc_values(color** array, int i_start, int j_start, int i_end, int j_end, 
@@ -205,7 +240,7 @@ int nx, int ny, point3 origin, double l, double r, double b, double t, vec3 u, v
             point3 s = q + su*u - sv*v;
             vec3 dir = s - origin;   
             ray r(origin, dir); 
-            color pixel_color = ray_color(r, faces, maxraytracedepth);
+            color pixel_color = ray_color(r, finalBvh, maxraytracedepth);
             array[j][i] = normalizeColor(pixel_color);     
         }
     }
@@ -222,7 +257,7 @@ int main(int argc, char** argv){
 		return 0;
 	
     setData();   
-          
+    
     int nx = camera.imageresolution[0];
     int ny = camera.imageresolution[1];
     color** array = new color*[ny];
@@ -250,15 +285,14 @@ int main(int argc, char** argv){
         y = yEnd;    
     }    
     threads[7] = thread(calc_values, array, x, y, nx, ny, nx, ny, origin, l, r, b, t, u, v, m, q); 
-    
-    
+        
     for(int j = 0; j < 8; j++){
 		threads[j].join();
 	}
 	time(&end);
 	double time_taken = double(end - start);
     std::cerr << "Time taken before print : " << fixed
-         << time_taken << setprecision(5);
+         << time_taken ; //<< setprecision(5);
     std::cerr << " sec " << endl;
 	
 	std::cout << "P3\n" << nx << ' ' << ny << "\n255\n";
@@ -277,7 +311,8 @@ int main(int argc, char** argv){
     time(&end);
     time_taken = double(end - start);
     std::cerr << "Time taken by program is : " << fixed
-         << time_taken << setprecision(5);
+         << time_taken ; //<< setprecision(5);
     std::cerr << " sec " << endl;
+    
     return 0;
 }

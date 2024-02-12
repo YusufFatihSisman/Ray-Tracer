@@ -4,6 +4,7 @@
 #include "ray.h"
 #include "structs.h"
 #include "vec3.h"
+#include "bvh.h"
 #include <math.h> 
 
 using std::max;
@@ -17,7 +18,7 @@ class pointLight{
             p = pos;
         }
 
-        color illuminate(const ray& r, const hit_record& hr, const faceList& faces) const;
+        color illuminate(const ray& r, const hit_record& hr, const bvh& bvh) const;
 
         int id;
         color i;
@@ -25,17 +26,21 @@ class pointLight{
 };
 
 
-color pointLight::illuminate(const ray& r, const hit_record& hr, const faceList& faces) const{
+color pointLight::illuminate(const ray& r, const hit_record& hr, const bvh& bvh) const{
     point3 x = hr.p;
     vec3 wi = (p - x);
     double len = wi.length();
     vec3 l = (p - x) / len;
     ray newRay = ray((x + l * EPS), l);
     hit_record shadow;
-    for(const auto& face : faces.objects){
+    /*for(const auto& face : faces.objects){
         if(face->hit(newRay, 0, len, shadow)){
             return color(0.0, 0.0, 0.0);
         }
+    }*/
+    if(bvh.hit(newRay, 0, len, shadow))
+    {
+        return color(0.0, 0.0, 0.0);
     }
     vec3 w0 = r.origin() - x;
     vec3 h = (wi + w0) / (wi + w0).length();

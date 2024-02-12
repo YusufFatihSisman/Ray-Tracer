@@ -41,6 +41,15 @@ class vec3{
         double length() const{
             return sqrt(x*x + y*y + z*z);
         }
+
+        double operator[](const int index) const{
+            if(index == 0)
+                return x;
+            else if(index == 1)
+                return y;
+            else
+                return z;
+        }
     
         double x;
         double y;
@@ -49,6 +58,17 @@ class vec3{
 };
 using point3 = vec3;   // 3D point
 using color = vec3;    // RGB color
+
+/*
+double vec3::operator[](const int index) const{
+    if(index == 0)
+        return x;
+    else if(index == 1)
+        return y;
+    else
+        return z;
+}
+*/
 
 inline std::ostream& operator<<(std::ostream &out, const vec3 &v) {
     return out << v.x << ' ' << v.y << ' ' << v.z;
