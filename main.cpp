@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <iomanip>
 #include <vector>
 #include "rapidxml-1.13/rapidxml.hpp"
 #include "helper.h"
@@ -290,9 +291,8 @@ int main(int argc, char** argv){
 		threads[j].join();
 	}
 	time(&end);
-	double time_taken = double(end - start);
-    std::cerr << "Time taken before print : " << fixed
-         << time_taken ; //<< setprecision(5);
+	double time_taken = (end - start);
+    std::cerr << "Time taken before print : " << setprecision(5) << fixed << time_taken;
     std::cerr << " sec " << endl;
 	
 	std::cout << "P3\n" << nx << ' ' << ny << "\n255\n";
@@ -307,11 +307,10 @@ int main(int argc, char** argv){
         delete[] array[i];   
     }
     delete[] array;
-
+    finalBvh.freeTree();
     time(&end);
-    time_taken = double(end - start);
-    std::cerr << "Time taken by program is : " << fixed
-         << time_taken ; //<< setprecision(5);
+    time_taken = (end - start);
+    std::cerr << "Time taken by program is : " << setprecision(5) << fixed << time_taken;
     std::cerr << " sec " << endl;
     
     return 0;

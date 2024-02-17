@@ -44,7 +44,7 @@ class bvh{
         }
 
         bvh(const vector<shared_ptr<face>> &faces){
-            if(faces.size() > 10)
+            if(faces.size() > 4)
             {
                 int half_size = faces.size() / 2;
                 vector<shared_ptr<face>> split_lo(faces.begin(), faces.begin() + half_size);
@@ -63,9 +63,13 @@ class bvh{
             right = NULL;
         }
 
+        void freeTree();
+
         bool operator<(const bvh& sbvh);
 
         bool hit(const ray& r, double t_min, double t_max, hit_record& rec) const;
+
+        bool shadowHit(const ray& r, double t_min, double t_max, hit_record& rec) const;
 
         void printBT(const std::string& prefix, const bvh* node, bool isLeft);
 
@@ -75,34 +79,58 @@ class bvh{
         bool hit(const ray& r, double t_min, double t_max) const;
         //double& x1, double& y1, double& z1, double& x2, double& y2, double& z2
         void findBoxBorders(const vector<shared_ptr<face>> &faces);
+        void freeTree(bvh* bvh);
 };
 
 bool bvh::hit(const ray& r, double t_min, double t_max, hit_record& rec) const{
-    if(this->hit(r, t_min, t_max) == false)
-    {
+    if(this->hit(r, t_min, t_max) == false){
         return false;
     } 
     
-    if(fclst.objects.size() != 0)
-    {
+    if(fclst.objects.size() != 0){
         return fclst.hit(r, t_min, t_max, rec);
     }
     rec.t = INFINITY_T;
     hit_record rec1, rec2;
     bool hitLeft = left->hit(r, t_min, t_max, rec1);
-    bool hitRight = right->hit(r, t_min, t_max, rec2);
-
+    //bool hitRight = right->hit(r, t_min, t_max, rec2);
+    
+    bool hitRight;
     if(hitLeft)
-    {
+        hitRight = right->hit(r, t_min, rec1.t, rec2);
+    else
+        hitRight = right->hit(r, t_min, t_max, rec2);
+    
+    if(hitLeft){
         rec = rec1;
     }
-    if(hitRight)
-    {
+    if(hitRight){
         rec = rec2.t < rec.t ? rec2 : rec;
     }
 
     return(hitLeft || hitRight);
 
+}
+
+bool bvh::shadowHit(const ray& r, double t_min, double t_max, hit_record& rec) const{
+    if(this->hit(r, t_min, t_max) == false){
+        return false;
+    } 
+    
+    if(fclst.objects.size() != 0){
+        for(const auto& face : fclst.objects){
+            if(face->hit(r, t_min, t_max, rec)){
+                return true;
+            }
+        }
+    }
+    rec.t = INFINITY_T;
+    hit_record rec1, rec2;
+    bool hitLeft = left->hit(r, t_min, t_max, rec1);
+    if(hitLeft == true)
+        return true;
+    bool hitRight = right->hit(r, t_min, t_max, rec2);
+    return hitRight;
 }
 
 bool bvh::hit(const ray& r, double t_min, double t_max) const{
@@ -160,18 +188,15 @@ bool bvh::hit(const ray& r, double t_min, double t_max) const{
         return false;
     }
 
-    //cout << "first condition passed\n";
-
     if(tEnd < t_min){
         return false;
     }
-
-    //cout << "second condition passed\n";
     
     if(tStart > t_min){
+        if(tStart > t_max)
+            return false;
         return true;
     }
-
     return true;
 }
 
@@ -186,6 +211,21 @@ bool bvh::operator<(const bvh& sbvh){
     //double otherOriginz = (sbvh.leftFrontBottom.z + sbvh.rightBackTop.z) / 2;
     
     return thisOriginx < otherOriginx;
+}
+
+void bvh::freeTree(){
+    freeTree(left);
+    freeTree(right);
+}
+
+void bvh::freeTree(bvh* bvh){
+    if(bvh == NULL)
+        return;
+
+    freeTree(bvh->left);
+    freeTree(bvh->right);
+
+    delete bvh;
 }
 
 void bvh::printBT(const std::string& prefix, const bvh* node, bool isLeft){

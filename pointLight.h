@@ -33,15 +33,8 @@ color pointLight::illuminate(const ray& r, const hit_record& hr, const bvh& bvh)
     vec3 l = (p - x) / len;
     ray newRay = ray((x + l * EPS), l);
     hit_record shadow;
-    /*for(const auto& face : faces.objects){
-        if(face->hit(newRay, 0, len, shadow)){
-            return color(0.0, 0.0, 0.0);
-        }
-    }*/
-    if(bvh.hit(newRay, 0, len, shadow))
-    {
+    if(bvh.shadowHit(newRay, 0, len, shadow))
         return color(0.0, 0.0, 0.0);
-    }
     vec3 w0 = r.origin() - x;
     vec3 h = (wi + w0) / (wi + w0).length();
     vec3 n = hr.normal;
